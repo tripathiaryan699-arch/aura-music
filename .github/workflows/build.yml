@@ -42,7 +42,7 @@ jobs:
           plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
           android {
               namespace = "com.aura.music"; compileSdk = 34
-              defaultConfig { applicationId = "com.aura.music"; minSdk = 26; targetSdk = 34; versionCode = 4; versionName = "4.0" }
+              defaultConfig { applicationId = "com.aura.music"; minSdk = 26; targetSdk = 34; versionCode = 6; versionName = "6.0" }
               buildFeatures { compose = true }
               composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
               compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
@@ -117,13 +117,15 @@ jobs:
                           val ja = JSONArray(str); val list = mutableListOf<Song>()
                           for (i in 0 until ja.length()) { val jo = ja.getJSONObject(i); list.add(Song(jo.getString("id"), jo.getString("t"), jo.getString("a"), jo.getString("art"), jo.getString("u"), jo.optBoolean("loc", false))) }
                           if (list.isEmpty()) defSongs else list
-                      } catch (e: Exception) { defSongs }
+                      } catch (_: Exception) { defSongs }
                   }
 
                   fun saveSongs(list: List<Song>) {
                       val ja = JSONArray(); list.forEach { s -> ja.put(JSONObject().apply { put("id", s.id); put("t", s.title); put("a", s.artist); put("art", s.art); put("u", s.url); put("loc", s.isLoc) }) }
                       prefs.edit().putString("songs", ja.toString()).apply()
                   }
+
+                  val palette = listOf(Color(0xFF00FF66), Color(0xFF00E5FF), Color(0xFFB026FF), Color(0xFFFF007F), Color(0xFFFFD700))
 
                   setContent {
                       var songs by remember { mutableStateOf(loadSongs()) }
@@ -133,7 +135,9 @@ jobs:
                       var q by remember { mutableStateOf("") }
                       var isEdit by remember { mutableStateOf(false) }
                       var locked by remember { mutableStateOf(prefs.getBoolean("locked", false)) }
-                      var accent by remember { mutableStateOf(Color(prefs.getInt("color", 0xFF00FF66.toInt()))) }
+                      var colorIdx by remember { mutableIntStateOf(prefs.getInt("c_idx", 0)) }
+                      val accent = palette.getOrElse(colorIdx) { palette[0] }
+
                       var taps by remember { mutableIntStateOf(0) }
                       var editSong by remember { mutableStateOf<Song?>(null) }
                       var showColor by remember { mutableStateOf(false) }
@@ -274,6 +278,4 @@ jobs:
                           var nTitle by remember { mutableStateOf(s.title) }
                           var nArtist by remember { mutableStateOf(s.artist) }
                           AlertDialog(
-                              onDismissRequest = { editSong = null },
-                              containerColor = Color(0xFF1E1E22),
-                              title = { Text("Edit Song", color = Col
+          
