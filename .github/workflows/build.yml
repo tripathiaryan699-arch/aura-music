@@ -24,9 +24,6 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Auto Generate Project Files
         run: |
           mkdir -p app/src/main/java/com/aura/music
@@ -311,7 +308,7 @@ jobs:
                   gson.fromJson<List<Song>>(json, object : TypeToken<List<Song>>() {}.type) ?: emptyList()
               }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-              val allSongs = combine(localSongs) { locals -> demoSongs + locals[0] }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), demoSongs)
+              val allSongs = localSongs.map { locals -> demoSongs + locals }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), demoSongs)
 
               val filteredSongs = combine(allSongs, searchQuery) { songs, query ->
                   if (query.isBlank()) songs else songs.filter { it.title.contains(query, true) || it.artist.contains(query, true) }
@@ -409,4 +406,6 @@ jobs:
                               }
                               NavigationBar(containerColor = AuraBlack, tonalElevation = 0.dp, modifier = Modifier.height(64.dp)) {
                                   BottomTab.values().forEach { tab ->
-                                      Navigat
+                                      NavigationBarItem(
+                                          selected = selectedTab == tab,
+   
