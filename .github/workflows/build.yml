@@ -28,6 +28,11 @@ jobs:
         run: |
           mkdir -p app/src/main/java/com/aura/music
 
+          cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          EOF
+
           cat << 'EOF' > settings.gradle.kts
           pluginManagement {
               repositories { google(); mavenCentral(); gradlePluginPortal() }
@@ -75,10 +80,7 @@ jobs:
               implementation(composeBom)
               implementation("androidx.compose.ui:ui")
               implementation("androidx.compose.material3:material3")
-              implementation("androidx.compose.material:material-icons-extended")
               implementation("androidx.activity:activity-compose:1.9.0")
-              implementation("androidx.media3:media3-exoplayer:1.3.1")
-              implementation("androidx.media3:media3-common:1.3.1")
           }
           EOF
 
@@ -105,6 +107,8 @@ jobs:
           cat << 'EOF' > app/src/main/java/com/aura/music/MainActivity.kt
           package com.aura.music
 
+          import android.media.AudioAttributes
+          import android.media.MediaPlayer
           import android.os.Bundle
           import androidx.activity.ComponentActivity
           import androidx.activity.compose.setContent
@@ -114,25 +118,21 @@ jobs:
           import androidx.compose.foundation.lazy.LazyColumn
           import androidx.compose.foundation.lazy.items
           import androidx.compose.foundation.shape.RoundedCornerShape
-          import androidx.compose.material.icons.Icons
-          import androidx.compose.material.icons.filled.*
           import androidx.compose.material3.*
           import androidx.compose.runtime.*
           import androidx.compose.ui.Alignment
           import androidx.compose.ui.Modifier
           import androidx.compose.ui.draw.clip
           import androidx.compose.ui.graphics.Color
+          import androidx.compose.ui.text.font.FontWeight
           import androidx.compose.ui.unit.dp
           import androidx.compose.ui.unit.sp
-          import androidx.media3.common.MediaItem
-          import androidx.media3.exoplayer.ExoPlayer
 
           class MainActivity : ComponentActivity() {
-              private lateinit var player: ExoPlayer
+              private var mediaPlayer: MediaPlayer? = null
 
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
-                  player = ExoPlayer.Builder(this).build()
 
                   val songs = listOf(
                       "Midnight Odyssey" to "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
@@ -144,42 +144,64 @@ jobs:
                   setContent {
                       var currentTitle by remember { mutableStateOf(songs[0].first) }
                       var isPlaying by remember { mutableStateOf(false) }
-                      val auraNeon = Color(0xFF00FF66)
-                      val auraBlack = Color(0xFF070708)
+                      val neon = Color(0xFF00FF66)
+                      val darkBg = Color(0xFF070708)
+                      val cardBg = Color(0xFF1B1B1E)
+
+                      fun playAudio(url: String, title: String) {
+                          currentTitle = title
+                          mediaPlayer?.release()
+                          mediaPlayer = MediaPlayer().apply {
+                              setAudioAttributes(
+                                  AudioAttributes.Builder()
+                                      .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                      .setUsage(AudioAttributes.USAGE_MEDIA)
+                                      .build()
+                              )
+                              setDataSource(url)
+                              setOnPreparedListener {
+                                  start()
+                                  isPlaying = true
+                              }
+                              setOnCompletionListener {
+                                  isPlaying = false
+                              }
+                              prepareAsync()
+                          }
+                      }
 
                       Column(
                           modifier = Modifier
                               .fillMaxSize()
-                              .background(auraBlack)
+                              .background(darkBg)
                               .padding(20.dp)
                       ) {
-                          Spacer(Modifier.height(24.dp))
-                          Text("AURA", color = auraNeon, fontSize = 32.sp)
-                          Text("Sound in full spectrum", color = Color(0xFF9E9EA7), fontSize = 14.sp)
+                          Spacer(Modifier.height(30.dp))
+                          Text("AURA", color = neon, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                          Text("Sound in full spectrum", color = Color.Gray, fontSize = 14.sp)
                           Spacer(Modifier.height(24.dp))
 
-                          LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                              items(songs) { (title, url) ->
+                          LazyColumn(
+                              modifier = Modifier.weight(1f),
+                              verticalArrangement = Arrangement.spacedBy(10.dp)
+                          ) {
+                              items(songs) { song ->
+                                  val title = song.first
+                                  val url = song.second
                                   Row(
                                       modifier = Modifier
                                           .fillMaxWidth()
-                                          .clip(RoundedCornerShape(10.dp))
-                                          .background(Color(0xFF1B1B1E))
-                                          .clickable {
-                                              currentTitle = title
-                                              player.setMediaItem(MediaItem.fromUri(url))
-                                              player.prepare()
-                                              player.play()
-                                              isPlaying = true
-                                          }
+                                          .clip(RoundedCornerShape(12.dp))
+                                          .background(cardBg)
+                                          .clickable { playAudio(url, title) }
                                           .padding(16.dp),
                                       verticalAlignment = Alignment.CenterVertically
                                   ) {
                                       Column(Modifier.weight(1f)) {
-                                          Text(title, color = Color.White)
-                                          Text("Aura Originals", color = Color(0xFF5E5E66), fontSize = 12.sp)
+                                          Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                                          Text("Aura Originals", color = Color(0xFF6E6E77), fontSize = 12.sp)
                                       }
-                                      Icon(Icons.Default.PlayArrow, contentDescription = null, tint = auraNeon)
+                                      Text("▶", color = neon, fontSize = 20.sp)
                                   }
                               }
                           }
@@ -187,44 +209,45 @@ jobs:
                           Row(
                               modifier = Modifier
                                   .fillMaxWidth()
-                                  .clip(RoundedCornerShape(12.dp))
-                                  .background(Color(0xFF121214))
-                                  .padding(14.dp),
+                                  .clip(RoundedCornerShape(14.dp))
+                                  .background(Color(0xFF141416))
+                                  .padding(16.dp),
                               verticalAlignment = Alignment.CenterVertically
                           ) {
-                              Column(Modifier.weight(1f)) {
-                                  Text(currentTitle, color = Color.White)
-                                  Text("Now Playing", color = auraNeon, fontSize = 12.sp)
-                              }
-                              IconButton(onClick = {
+                          Column(Modifier.weight(1f)) {
+                              Text(currentTitle, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                              Text(if (isPlaying) "Playing now" else "Paused", color = neon, fontSize = 12.sp)
+                          }
+                          IconButton(onClick = {
+                              mediaPlayer?.let { player ->
                                   if (player.isPlaying) {
                                       player.pause()
                                       isPlaying = false
                                   } else {
-                                      player.play()
+                                      player.start()
                                       isPlaying = true
                                   }
-                              }) {
-                                  Icon(
-                                      if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                      contentDescription = null,
-                                      tint = auraNeon
-                                  )
+                              } ?: run {
+                                  playAudio(songs[0].second, songs[0].first)
                               }
+                          }) {
+                              Text(if (isPlaying) "⏸" else "▶", color = neon, fontSize = 24.sp)
                           }
+                      }
                       }
                   }
               }
 
               override fun onDestroy() {
                   super.onDestroy()
-                  player.release()
+                  mediaPlayer?.release()
+                  mediaPlayer = null
               }
           }
           EOF
 
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
