@@ -27,11 +27,349 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+      - name: Auto Generate Project Files
+        run: |
+          mkdir -p app/src/main/java/com/aura/music
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: AURA-Music-Player
-          path: app/build/outputs/apk/debug/*.apk
+          cat << 'EOF' > settings.gradle.kts
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "AURA"
+          include(":app")
+          EOF
+
+          cat << 'EOF' > build.gradle.kts
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+          }
+          EOF
+
+          cat << 'EOF' > app/build.gradle.kts
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+
+          android {
+              namespace = "com.aura.music"
+              compileSdk = 34
+
+              defaultConfig {
+                  applicationId = "com.aura.music"
+                  minSdk = 26
+                  targetSdk = 34
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+
+              buildFeatures {
+                  compose = true
+              }
+              composeOptions {
+                  kotlinCompilerExtensionVersion = "1.5.14"
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+
+          dependencies {
+              val composeBom = platform("androidx.compose:compose-bom:2024.05.00")
+              implementation(composeBom)
+              implementation("androidx.compose.ui:ui")
+              implementation("androidx.compose.ui:ui-graphics")
+              implementation("androidx.compose.material3:material3")
+              implementation("androidx.compose.material:material-icons-extended")
+              implementation("androidx.activity:activity-compose:1.9.0")
+              implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+
+              implementation("androidx.media3:media3-exoplayer:1.3.1")
+              implementation("androidx.media3:media3-common:1.3.1")
+              implementation("io.coil-kt:coil-compose:2.6.0")
+              implementation("androidx.datastore:datastore-preferences:1.1.1")
+              implementation("com.google.code.gson:gson:2.10.1")
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <application
+                  android:allowBackup="true"
+                  android:label="AURA"
+                  android:supportsRtl="true"
+                  android:theme="@android:style/Theme.Material.NoActionBar">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:theme="@android:style/Theme.Black.NoTitleBar">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/aura/music/MainActivity.kt
+          package com.aura.music
+
+          import android.app.Application
+          import android.content.Context
+          import android.media.MediaMetadataRetriever
+          import android.net.Uri
+          import android.os.Bundle
+          import androidx.activity.ComponentActivity
+          import androidx.activity.compose.rememberLauncherForActivityResult
+          import androidx.activity.compose.setContent
+          import androidx.activity.result.contract.ActivityResultContracts
+          import androidx.activity.viewModels
+          import androidx.compose.animation.AnimatedVisibility
+          import androidx.compose.animation.slideInVertically
+          import androidx.compose.animation.slideOutVertically
+          import androidx.compose.foundation.background
+          import androidx.compose.foundation.clickable
+          import androidx.compose.foundation.layout.*
+          import androidx.compose.foundation.lazy.LazyColumn
+          import androidx.compose.foundation.lazy.LazyRow
+          import androidx.compose.foundation.lazy.items
+          import androidx.compose.foundation.shape.CircleShape
+          import androidx.compose.foundation.shape.RoundedCornerShape
+          import androidx.compose.material.icons.Icons
+          import androidx.compose.material.icons.filled.*
+          import androidx.compose.material.icons.outlined.FavoriteBorder
+          import androidx.compose.material3.*
+          import androidx.compose.runtime.*
+          import androidx.compose.ui.Alignment
+          import androidx.compose.ui.Modifier
+          import androidx.compose.ui.draw.clip
+          import androidx.compose.ui.draw.shadow
+          import androidx.compose.ui.graphics.Brush
+          import androidx.compose.ui.graphics.Color
+          import androidx.compose.ui.graphics.vector.ImageVector
+          import androidx.compose.ui.layout.ContentScale
+          import androidx.compose.ui.text.font.FontWeight
+          import androidx.compose.ui.text.style.TextOverflow
+          import androidx.compose.ui.unit.dp
+          import androidx.compose.ui.unit.sp
+          import androidx.datastore.preferences.core.edit
+          import androidx.datastore.preferences.core.stringPreferencesKey
+          import androidx.datastore.preferences.preferencesDataStore
+          import androidx.lifecycle.AndroidViewModel
+          import androidx.lifecycle.viewModelScope
+          import androidx.media3.common.MediaItem
+          import androidx.media3.common.Player
+          import androidx.media3.exoplayer.ExoPlayer
+          import coil.compose.AsyncImage
+          import com.google.gson.Gson
+          import com.google.gson.reflect.TypeToken
+          import kotlinx.coroutines.CoroutineScope
+          import kotlinx.coroutines.Dispatchers
+          import kotlinx.coroutines.delay
+          import kotlinx.coroutines.flow.*
+          import kotlinx.coroutines.launch
+          import java.util.UUID
+
+          val AuraBlack = Color(0xFF070708)
+          val AuraSurfaceDark = Color(0xFF121214)
+          val AuraCardDark = Color(0xFF1B1B1E)
+          val AuraCardBorder = Color(0xFF26262B)
+          val AuraNeon = Color(0xFF00FF66)
+          val AuraMutedGreen = Color(0xFF00B048)
+          val AuraTextPrimary = Color(0xFFFFFFFF)
+          val AuraTextSecondary = Color(0xFF9E9EA7)
+          val AuraTextMuted = Color(0xFF5E5E66)
+
+          data class Song(
+              val id: String = UUID.randomUUID().toString(),
+              val title: String,
+              val artist: String,
+              val artworkUrl: String,
+              val mediaUri: String,
+              val durationMs: Long = 0L,
+              val isLocal: Boolean = false
+          )
+
+          data class Playlist(
+              val id: String = UUID.randomUUID().toString(),
+              val name: String,
+              val songIds: List<String> = emptyList()
+          )
+
+          val Context.dataStore by preferencesDataStore(name = "aura_store")
+
+          class AuraPlayerManager(context: Context) {
+              private val exoPlayer = ExoPlayer.Builder(context).build()
+              private val scope = CoroutineScope(Dispatchers.Main)
+
+              val currentSong = MutableStateFlow<Song?>(null)
+              val isPlaying = MutableStateFlow(false)
+              val currentPosition = MutableStateFlow(0L)
+              val duration = MutableStateFlow(0L)
+
+              private var playlist: List<Song> = emptyList()
+              private var currentIndex: Int = -1
+
+              init {
+                  exoPlayer.addListener(object : Player.Listener {
+                      override fun onIsPlayingChanged(playing: Boolean) { isPlaying.value = playing }
+                      override fun onPlaybackStateChanged(state: Int) {
+                          if (state == Player.STATE_READY) duration.value = exoPlayer.duration.coerceAtLeast(0L)
+                          else if (state == Player.STATE_ENDED) playNext()
+                      }
+                  })
+                  scope.launch {
+                      while (true) {
+                          if (exoPlayer.isPlaying) currentPosition.value = exoPlayer.currentPosition.coerceAtLeast(0L)
+                          delay(400)
+                      }
+                  }
+              }
+
+              fun playQueue(songs: List<Song>, startIndex: Int = 0) {
+                  if (songs.isEmpty() || startIndex !in songs.indices) return
+                  playlist = songs
+                  currentIndex = startIndex
+                  playSong(songs[currentIndex])
+              }
+
+              private fun playSong(song: Song) {
+                  currentSong.value = song
+                  exoPlayer.setMediaItem(MediaItem.fromUri(song.mediaUri))
+                  exoPlayer.prepare()
+                  exoPlayer.play()
+              }
+
+              fun togglePlayPause() { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play() }
+              fun playNext() {
+                  if (playlist.isEmpty()) return
+                  currentIndex = (currentIndex + 1) % playlist.size
+                  playSong(playlist[currentIndex])
+              }
+              fun playPrevious() {
+                  if (playlist.isEmpty()) return
+                  currentIndex = if (currentIndex - 1 < 0) playlist.size - 1 else currentIndex - 1
+                  playSong(playlist[currentIndex])
+              }
+              fun seekTo(pos: Long) {
+                  exoPlayer.seekTo(pos)
+                  currentPosition.value = pos
+              }
+              fun release() { exoPlayer.release() }
+          }
+
+          class AuraViewModel(application: Application) : AndroidViewModel(application) {
+              val playerManager = AuraPlayerManager(application)
+              private val gson = Gson()
+              private val LIKED_KEY = stringPreferencesKey("aura_likes")
+              private val PLAYLISTS_KEY = stringPreferencesKey("aura_playlists")
+              private val LOCAL_KEY = stringPreferencesKey("aura_locals")
+
+              val demoSongs = listOf(
+                  Song("1", "Midnight Odyssey", "Aura Sound Lab", "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", 372000L),
+                  Song("2", "Cybernetic Dreams", "Kavinsky Wave", "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", 423000L),
+                  Song("3", "Neon Velocity", "Lofi Synthetics", "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", 345000L),
+                  Song("4", "Electric Pulse", "Aura Collective", "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", 301000L)
+              )
+
+              val searchQuery = MutableStateFlow("")
+              val isPlayerExpanded = MutableStateFlow(false)
+
+              val likedSongIds = application.dataStore.data.map { prefs ->
+                  val json = prefs[LIKED_KEY] ?: "[]"
+                  gson.fromJson<Set<String>>(json, object : TypeToken<Set<String>>() {}.type) ?: emptySet()
+              }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+              val playlists = application.dataStore.data.map { prefs ->
+                  val json = prefs[PLAYLISTS_KEY] ?: "[]"
+                  gson.fromJson<List<Playlist>>(json, object : TypeToken<List<Playlist>>() {}.type) ?: emptyList()
+              }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+              val localSongs = application.dataStore.data.map { prefs ->
+                  val json = prefs[LOCAL_KEY] ?: "[]"
+                  gson.fromJson<List<Song>>(json, object : TypeToken<List<Song>>() {}.type) ?: emptyList()
+              }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+              val allSongs = combine(localSongs) { locals -> demoSongs + locals[0] }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), demoSongs)
+
+              val filteredSongs = combine(allSongs, searchQuery) { songs, query ->
+                  if (query.isBlank()) songs else songs.filter { it.title.contains(query, true) || it.artist.contains(query, true) }
+              }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), demoSongs)
+
+              fun toggleLike(songId: String) {
+                  viewModelScope.launch {
+                      val app = getApplication<Application>()
+                      app.dataStore.edit { prefs ->
+                          val current: MutableSet<String> = gson.fromJson(prefs[LIKED_KEY] ?: "[]", object : TypeToken<MutableSet<String>>() {}.type) ?: mutableSetOf()
+                          if (current.contains(songId)) current.remove(songId) else current.add(songId)
+                          prefs[LIKED_KEY] = gson.toJson(current)
+                      }
+                  }
+              }
+
+              fun createPlaylist(name: String) {
+                  if (name.isBlank()) return
+                  viewModelScope.launch {
+                      val app = getApplication<Application>()
+                      app.dataStore.edit { prefs ->
+                          val list: MutableList<Playlist> = gson.fromJson(prefs[PLAYLISTS_KEY] ?: "[]", object : TypeToken<MutableList<Playlist>>() {}.type) ?: mutableListOf()
+                          list.add(0, Playlist(name = name))
+                          prefs[PLAYLISTS_KEY] = gson.toJson(list)
+                      }
+                  }
+              }
+
+              fun importLocalAudio(uri: Uri) {
+                  val app = getApplication<Application>()
+                  try {
+                      val retriever = MediaMetadataRetriever()
+                      retriever.setDataSource(app, uri)
+                      val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "Local Track"
+                      val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST) ?: "Device Audio"
+                      val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                      val song = Song(title = title, artist = artist, artworkUrl = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&q=80", mediaUri = uri.toString(), durationMs = duration, isLocal = true)
+                      viewModelScope.launch {
+                          app.dataStore.edit { prefs ->
+                              val list: MutableList<Song> = gson.fromJson(prefs[LOCAL_KEY] ?: "[]", object : TypeToken<MutableList<Song>>() {}.type) ?: mutableListOf()
+                              list.add(0, song)
+                              prefs[LOCAL_KEY] = gson.toJson(list)
+                          }
+                      }
+                  } catch (_: Exception) {}
+              }
+
+              override fun onCleared() {
+                  super.onCleared()
+                  playerManager.release()
+              }
+          }
+
+          enum class BottomTab(val title: String, val icon: ImageVector) {
+              HOME("Home", Icons.Default.Home),
+              SEARCH("Search", Icons.Default.Search),
+              LIBRARY("Library", Icons.Default.LibraryMusic)
+          }
+
+          class MainActivity : ComponentActivity() {
+              private val viewModel: AuraViewModel by viewMod
