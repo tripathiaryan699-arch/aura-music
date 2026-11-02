@@ -372,4 +372,41 @@ jobs:
           }
 
           class MainActivity : ComponentActivity() {
-              private val viewModel: AuraViewModel by viewMod
+              private val viewModel: AuraViewModel by viewModels()
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContent {
+                      var selectedTab by remember { mutableStateOf(BottomTab.HOME) }
+                      val allSongs by viewModel.allSongs.collectAsState()
+                      val filteredSongs by viewModel.filteredSongs.collectAsState()
+                      val searchQuery by viewModel.searchQuery.collectAsState()
+                      val likedIds by viewModel.likedSongIds.collectAsState()
+                      val playlists by viewModel.playlists.collectAsState()
+                      val localSongs by viewModel.localSongs.collectAsState()
+                      val currentSong by viewModel.playerManager.currentSong.collectAsState()
+                      val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsState()
+
+                      Box(modifier = Modifier.fillMaxSize().background(AuraBlack)) {
+                          when (selectedTab) {
+                              BottomTab.HOME -> HomeScreen(allSongs) { s, q -> viewModel.playerManager.playQueue(q, q.indexOf(s)) }
+                              BottomTab.SEARCH -> SearchScreen(searchQuery, { viewModel.searchQuery.value = it }, filteredSongs) { s, q -> viewModel.playerManager.playQueue(q, q.indexOf(s)) }
+                              BottomTab.LIBRARY -> LibraryScreen(
+                                  likedCount = likedIds.size, playlists = playlists, localSongs = localSongs,
+                                  onCreatePlaylist = { viewModel.createPlaylist(it) },
+                                  onImportAudio = { viewModel.importLocalAudio(it) },
+                                  onLikedSongsClick = {
+                                      val likes = allSongs.filter { likedIds.contains(it.id) }
+                                      if (likes.isNotEmpty()) viewModel.playerManager.playQueue(likes, 0)
+                                  },
+                                  onSongSelected = { s, q -> viewModel.playerManager.playQueue(q, q.indexOf(s)) }
+                              )
+                          }
+
+                          Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+                              if (currentSong != null) {
+                                  MiniPlayerView(viewModel.playerManager) { viewModel.isPlayerExpanded.value = true }
+                              }
+                              NavigationBar(containerColor = AuraBlack, tonalElevation = 0.dp, modifier = Modifier.height(64.dp)) {
+                                  BottomTab.values().forEach { tab ->
+                                      Navigat
