@@ -64,8 +64,8 @@ jobs:
                   applicationId = "com.aura.music"
                   minSdk = 26
                   targetSdk = 34
-                  versionCode = 1
-                  versionName = "1.0"
+                  versionCode = 2
+                  versionName = "2.0"
               }
               buildFeatures { compose = true }
               composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
@@ -81,6 +81,7 @@ jobs:
               implementation("androidx.compose.ui:ui")
               implementation("androidx.compose.material3:material3")
               implementation("androidx.activity:activity-compose:1.9.0")
+              implementation("io.coil-kt:coil-compose:2.6.0")
           }
           EOF
 
@@ -109,148 +110,225 @@ jobs:
 
           import android.media.AudioAttributes
           import android.media.MediaPlayer
+          import android.net.Uri
           import android.os.Bundle
           import androidx.activity.ComponentActivity
+          import androidx.activity.compose.rememberLauncherForActivityResult
           import androidx.activity.compose.setContent
+          import androidx.activity.result.contract.ActivityResultContracts
+          import androidx.compose.animation.*
           import androidx.compose.foundation.background
           import androidx.compose.foundation.clickable
           import androidx.compose.foundation.layout.*
           import androidx.compose.foundation.lazy.LazyColumn
+          import androidx.compose.foundation.lazy.LazyRow
           import androidx.compose.foundation.lazy.items
+          import androidx.compose.foundation.shape.CircleShape
           import androidx.compose.foundation.shape.RoundedCornerShape
           import androidx.compose.material3.*
           import androidx.compose.runtime.*
           import androidx.compose.ui.Alignment
           import androidx.compose.ui.Modifier
           import androidx.compose.ui.draw.clip
+          import androidx.compose.ui.graphics.Brush
           import androidx.compose.ui.graphics.Color
+          import androidx.compose.ui.layout.ContentScale
           import androidx.compose.ui.text.font.FontWeight
+          import androidx.compose.ui.text.style.TextOverflow
           import androidx.compose.ui.unit.dp
           import androidx.compose.ui.unit.sp
+          import coil.compose.AsyncImage
+
+          data class Song(
+              val id: String,
+              val title: String,
+              val artist: String,
+              val artUrl: String,
+              val url: String,
+              val isLocal: Boolean = false
+          )
 
           class MainActivity : ComponentActivity() {
-              private var mediaPlayer: MediaPlayer? = null
+              private var player: MediaPlayer? = null
 
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
 
-                  val songs = listOf(
-                      "Midnight Odyssey" to "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-                      "Cybernetic Dreams" to "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-                      "Neon Velocity" to "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
-                      "Electric Pulse" to "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"
+                  val defaultSongs = listOf(
+                      Song("1", "Midnight Odyssey", "Aura Sound Lab", "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"),
+                      Song("2", "Cybernetic Dreams", "Kavinsky Wave", "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"),
+                      Song("3", "Neon Velocity", "Lofi Synthetics", "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"),
+                      Song("4", "Electric Pulse", "Aura Collective", "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3")
                   )
 
                   setContent {
-                      var currentTitle by remember { mutableStateOf(songs[0].first) }
+                      var songList by remember { mutableStateOf(defaultSongs) }
+                      var currentSong by remember { mutableStateOf(defaultSongs[0]) }
                       var isPlaying by remember { mutableStateOf(false) }
-                      val neon = Color(0xFF00FF66)
-                      val darkBg = Color(0xFF070708)
-                      val cardBg = Color(0xFF1B1B1E)
+                      var isExpanded by remember { mutableStateOf(false) }
+                      var currentTab by remember { mutableStateOf("HOME") }
+                      var searchQuery by remember { mutableStateOf("") }
+                      val likedSongIds = remember { mutableStateListOf<String>() }
+                      var progress by remember { mutableFloatStateOf(0f) }
 
-                      fun playAudio(url: String, title: String) {
-                          currentTitle = title
-                          mediaPlayer?.release()
-                          mediaPlayer = MediaPlayer().apply {
+                      val neon = Color(0xFF00FF66)
+                      val bgBlack = Color(0xFF070708)
+                      val surface = Color(0xFF141417)
+                      val cardBg = Color(0xFF1E1E22)
+
+                      fun playSong(song: Song) {
+                          currentSong = song
+                          player?.release()
+                          player = MediaPlayer().apply {
                               setAudioAttributes(
                                   AudioAttributes.Builder()
                                       .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                                       .setUsage(AudioAttributes.USAGE_MEDIA)
                                       .build()
                               )
-                              setDataSource(url)
+                              if (song.isLocal) {
+                                  setDataSource(this@MainActivity, Uri.parse(song.url))
+                              } else {
+                                  setDataSource(song.url)
+                              }
                               setOnPreparedListener {
                                   start()
                                   isPlaying = true
                               }
                               setOnCompletionListener {
-                                  isPlaying = false
+                                  val nextIdx = (songList.indexOf(currentSong) + 1) % songList.size
+                                  playSong(songList[nextIdx])
                               }
                               prepareAsync()
                           }
                       }
 
-                      Column(
-                          modifier = Modifier
-                              .fillMaxSize()
-                              .background(darkBg)
-                              .padding(20.dp)
-                      ) {
-                          Spacer(Modifier.height(30.dp))
-                          Text("AURA", color = neon, fontSize = 34.sp, fontWeight = FontWeight.Bold)
-                          Text("Sound in full spectrum", color = Color.Gray, fontSize = 14.sp)
-                          Spacer(Modifier.height(24.dp))
+                      val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                          uri?.let {
+                              val title = it.lastPathSegment?.substringAfterLast('/') ?: "Local Audio File"
+                              val newSong = Song("loc_${System.currentTimeMillis()}", title, "Phone Storage", "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&q=80", it.toString(), true)
+                              songList = listOf(newSong) + songList
+                              playSong(newSong)
+                          }
+                      }
 
-                          LazyColumn(
-                              modifier = Modifier.weight(1f),
-                              verticalArrangement = Arrangement.spacedBy(10.dp)
-                          ) {
-                              items(songs) { song ->
-                                  val title = song.first
-                                  val url = song.second
-                                  Row(
-                                      modifier = Modifier
-                                          .fillMaxWidth()
-                                          .clip(RoundedCornerShape(12.dp))
-                                          .background(cardBg)
-                                          .clickable { playAudio(url, title) }
-                                          .padding(16.dp),
-                                      verticalAlignment = Alignment.CenterVertically
-                                  ) {
-                                      Column(Modifier.weight(1f)) {
-                                          Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                                          Text("Aura Originals", color = Color(0xFF6E6E77), fontSize = 12.sp)
+                      Box(modifier = Modifier.fillMaxSize().background(bgBlack)) {
+                          Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                              Spacer(Modifier.height(36.dp))
+
+                              // Top Header
+                              Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                  Column {
+                                      Text("AURA", color = neon, fontSize = 32.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                                      Text("Sound in full spectrum", color = Color(0xFF8E8E93), fontSize = 13.sp)
+                                  }
+                                  Text("● LIVE", color = neon, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                              }
+
+                              Spacer(Modifier.height(18.dp))
+
+                              // Screen Tab Content
+                              when (currentTab) {
+                                  "HOME" -> {
+                                      LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 140.dp)) {
+                                          item {
+                                              Text("Featured Albums", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                              Spacer(Modifier.height(12.dp))
+                                              LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                                  items(songList) { song ->
+                                                      Column(Modifier.width(140.dp).clickable { playSong(song) }) {
+                                                          AsyncImage(model = song.artUrl, contentDescription = null, modifier = Modifier.size(140.dp).clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop)
+                                                          Spacer(Modifier.height(8.dp))
+                                                          Text(song.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                          Text(song.artist, color = Color(0xFF8E8E93), fontSize = 12.sp, maxLines = 1)
+                                                      }
+                                                  }
+                                              }
+                                              Spacer(Modifier.height(24.dp))
+                                              Text("Quick Picks", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                              Spacer(Modifier.height(12.dp))
+                                          }
+                                          items(songList) { song ->
+                                              Row(
+                                                  Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(10.dp)).background(surface).clickable { playSong(song) }.padding(10.dp),
+                                                  verticalAlignment = Alignment.CenterVertically
+                                              ) {
+                                                  AsyncImage(model = song.artUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                                                  Spacer(Modifier.width(12.dp))
+                                                  Column(Modifier.weight(1f)) {
+                                                      Text(song.title, color = Color.White, fontWeight = FontWeight.Medium, maxLines = 1)
+                                                      Text(song.artist, color = Color(0xFF8E8E93), fontSize = 12.sp, maxLines = 1)
+                                                  }
+                                                  Text("▶", color = neon, fontSize = 18.sp)
+                                              }
+                                          }
                                       }
-                                      Text("▶", color = neon, fontSize = 20.sp)
                                   }
-                              }
-                          }
-
-                          Row(
-                              modifier = Modifier
-                                  .fillMaxWidth()
-                                  .clip(RoundedCornerShape(14.dp))
-                                  .background(Color(0xFF141416))
-                                  .padding(16.dp),
-                              verticalAlignment = Alignment.CenterVertically
-                          ) {
-                          Column(Modifier.weight(1f)) {
-                              Text(currentTitle, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                              Text(if (isPlaying) "Playing now" else "Paused", color = neon, fontSize = 12.sp)
-                          }
-                          IconButton(onClick = {
-                              mediaPlayer?.let { player ->
-                                  if (player.isPlaying) {
-                                      player.pause()
-                                      isPlaying = false
-                                  } else {
-                                      player.start()
-                                      isPlaying = true
+                                  "SEARCH" -> {
+                                      Column(Modifier.weight(1f)) {
+                                          TextField(
+                                              value = searchQuery,
+                                              onValueChange = { searchQuery = it },
+                                              placeholder = { Text("Search songs or artists...", color = Color.Gray) },
+                                              singleLine = true,
+                                              shape = RoundedCornerShape(12.dp),
+                                              colors = TextFieldDefaults.colors(focusedContainerColor = surface, unfocusedContainerColor = surface, focusedTextColor = Color.White, unfocusedTextColor = Color.White),
+                                              modifier = Modifier.fillMaxWidth()
+                                          )
+                                          Spacer(Modifier.height(14.dp))
+                                          val filtered = songList.filter { it.title.contains(searchQuery, true) || it.artist.contains(searchQuery, true) }
+                                          LazyColumn(contentPadding = PaddingValues(bottom = 140.dp)) {
+                                              items(filtered) { song ->
+                                                  Row(
+                                                      Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(10.dp)).background(surface).clickable { playSong(song) }.padding(10.dp),
+                                                      verticalAlignment = Alignment.CenterVertically
+                                                  ) {
+                                                      AsyncImage(model = song.artUrl, contentDescription = null, modifier = Modifier.size(46.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                                                      Spacer(Modifier.width(12.dp))
+                                                      Column(Modifier.weight(1f)) {
+                                                          Text(song.title, color = Color.White)
+                                                          Text(song.artist, color = Color.Gray, fontSize = 12.sp)
+                                                      }
+                                                      Text("▶", color = neon, fontSize = 16.sp)
+                                                  }
+                                              }
+                                          }
+                                      }
                                   }
-                              } ?: run {
-                                  playAudio(songs[0].second, songs[0].first)
-                              }
-                          }) {
-                              Text(if (isPlaying) "⏸" else "▶", color = neon, fontSize = 24.sp)
-                          }
-                      }
-                      }
-                  }
-              }
-
-              override fun onDestroy() {
-                  super.onDestroy()
-                  mediaPlayer?.release()
-                  mediaPlayer = null
-              }
-          }
-          EOF
-
-      - name: Build Debug APK
-        run: gradle assembleDebug
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: AURA-Music-Player
-          path: app/build/outputs/apk/debug/*.apk
+                                  "LIBRARY" -> {
+                                      Column(Modifier.weight(1f)) {
+                                          Row(
+                                              Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(cardBg).clickable { audioPicker.launch(arrayOf("audio/*")) }.padding(16.dp),
+                                              verticalAlignment = Alignment.CenterVertically
+                                          ) {
+                                              Text("📁", fontSize = 24.sp)
+                                              Spacer(Modifier.width(14.dp))
+                                              Column(Modifier.weight(1f)) {
+                                                  Text("Add Songs From Phone", color = Color.White, fontWeight = FontWeight.Bold)
+                                                  Text("Select any MP3 from your phone storage", color = Color.Gray, fontSize = 12.sp)
+                                              }
+                                              Text("+", color = neon, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                          }
+                                          Spacer(Modifier.height(14.dp))
+                                          Row(
+                                              Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(surface).padding(16.dp),
+                                              verticalAlignment = Alignment.CenterVertically
+                                          ) {
+                                              Text("❤️", fontSize = 24.sp)
+                                              Spacer(Modifier.width(14.dp))
+                                              Column {
+                                                  Text("Liked Tracks", color = Color.White, fontWeight = FontWeight.Bold)
+                                                  Text("${likedSongIds.size} songs liked", color = neon, fontSize = 12.sp)
+                                              }
+                                          }
+                                          Spacer(Modifier.height(18.dp))
+                                          Text("Your Tracks", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                                          Spacer(Modifier.height(8.dp))
+                                          LazyColumn(contentPadding = PaddingValues(bottom = 140.dp)) {
+                                              items(songList) { song ->
+                                                  Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(surface).clickable { playSong(song) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                      AsyncImage(model = song.artUrl, contentDescription = null, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Crop)
+                                                      Spacer(Modifier.width(12.dp))
+                                                      Column(Modifier.weight(1f)) {
+                                                          Text(song.title, color = Color.White, fontSize = 14.sp)
+                                                          Text(if (song.isLocal)
