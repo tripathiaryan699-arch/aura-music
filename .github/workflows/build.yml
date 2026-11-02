@@ -108,7 +108,6 @@ jobs:
           cat << 'EOF' > app/src/main/java/com/aura/music/MainActivity.kt
           package com.aura.music
 
-          import android.media.AudioAttributes
           import android.media.MediaPlayer
           import android.net.Uri
           import android.os.Bundle
@@ -116,21 +115,18 @@ jobs:
           import androidx.activity.compose.rememberLauncherForActivityResult
           import androidx.activity.compose.setContent
           import androidx.activity.result.contract.ActivityResultContracts
-          import androidx.compose.animation.*
           import androidx.compose.foundation.background
           import androidx.compose.foundation.clickable
           import androidx.compose.foundation.layout.*
           import androidx.compose.foundation.lazy.LazyColumn
           import androidx.compose.foundation.lazy.LazyRow
           import androidx.compose.foundation.lazy.items
-          import androidx.compose.foundation.shape.CircleShape
           import androidx.compose.foundation.shape.RoundedCornerShape
           import androidx.compose.material3.*
           import androidx.compose.runtime.*
           import androidx.compose.ui.Alignment
           import androidx.compose.ui.Modifier
           import androidx.compose.ui.draw.clip
-          import androidx.compose.ui.graphics.Brush
           import androidx.compose.ui.graphics.Color
           import androidx.compose.ui.layout.ContentScale
           import androidx.compose.ui.text.font.FontWeight
@@ -139,196 +135,173 @@ jobs:
           import androidx.compose.ui.unit.sp
           import coil.compose.AsyncImage
 
-          data class Song(
-              val id: String,
-              val title: String,
-              val artist: String,
-              val artUrl: String,
-              val url: String,
-              val isLocal: Boolean = false
-          )
+          data class Song(val id: String, val title: String, val artist: String, val art: String, val url: String, val isLoc: Boolean = false)
 
           class MainActivity : ComponentActivity() {
-              private var player: MediaPlayer? = null
+              private var mp: MediaPlayer? = null
 
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
-
-                  val defaultSongs = listOf(
-                      Song("1", "Midnight Odyssey", "Aura Sound Lab", "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"),
-                      Song("2", "Cybernetic Dreams", "Kavinsky Wave", "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"),
-                      Song("3", "Neon Velocity", "Lofi Synthetics", "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"),
-                      Song("4", "Electric Pulse", "Aura Collective", "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3")
+                  val def = listOf(
+                      Song("1", "Midnight Odyssey", "Aura Sound Lab", "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"),
+                      Song("2", "Cybernetic Dreams", "Kavinsky Wave", "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"),
+                      Song("3", "Neon Velocity", "Lofi Synthetics", "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"),
+                      Song("4", "Electric Pulse", "Aura Collective", "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3")
                   )
 
                   setContent {
-                      var songList by remember { mutableStateOf(defaultSongs) }
-                      var currentSong by remember { mutableStateOf(defaultSongs[0]) }
-                      var isPlaying by remember { mutableStateOf(false) }
-                      var isExpanded by remember { mutableStateOf(false) }
-                      var currentTab by remember { mutableStateOf("HOME") }
-                      var searchQuery by remember { mutableStateOf("") }
-                      val likedSongIds = remember { mutableStateListOf<String>() }
-                      var progress by remember { mutableFloatStateOf(0f) }
+                      var songs by remember { mutableStateOf(def) }
+                      var curr by remember { mutableStateOf(def[0]) }
+                      var play by remember { mutableStateOf(false) }
+                      var tab by remember { mutableStateOf("HOME") }
+                      var q by remember { mutableStateOf("") }
+                      val likes = remember { mutableStateListOf<String>() }
 
                       val neon = Color(0xFF00FF66)
-                      val bgBlack = Color(0xFF070708)
-                      val surface = Color(0xFF141417)
-                      val cardBg = Color(0xFF1E1E22)
+                      val dark = Color(0xFF070708)
+                      val card = Color(0xFF16161A)
 
-                      fun playSong(song: Song) {
-                          currentSong = song
-                          player?.release()
-                          player = MediaPlayer().apply {
-                              setAudioAttributes(
-                                  AudioAttributes.Builder()
-                                      .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                                      .setUsage(AudioAttributes.USAGE_MEDIA)
-                                      .build()
-                              )
-                              if (song.isLocal) {
-                                  setDataSource(this@MainActivity, Uri.parse(song.url))
-                              } else {
-                                  setDataSource(song.url)
-                              }
-                              setOnPreparedListener {
-                                  start()
-                                  isPlaying = true
-                              }
-                              setOnCompletionListener {
-                                  val nextIdx = (songList.indexOf(currentSong) + 1) % songList.size
-                                  playSong(songList[nextIdx])
-                              }
+                      fun playS(s: Song) {
+                          curr = s; mp?.release()
+                          mp = MediaPlayer().apply {
+                              if (s.isLoc) setDataSource(this@MainActivity, Uri.parse(s.url)) else setDataSource(s.url)
+                              setOnPreparedListener { start(); play = true }
                               prepareAsync()
                           }
                       }
 
-                      val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                          uri?.let {
-                              val title = it.lastPathSegment?.substringAfterLast('/') ?: "Local Audio File"
-                              val newSong = Song("loc_${System.currentTimeMillis()}", title, "Phone Storage", "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&q=80", it.toString(), true)
-                              songList = listOf(newSong) + songList
-                              playSong(newSong)
+                      val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
+                          u?.let {
+                              val ns = Song("l_${System.currentTimeMillis()}", it.lastPathSegment?.substringAfterLast('/') ?: "Local Track", "Phone Audio", "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&q=80", it.toString(), true)
+                              songs = listOf(ns) + songs
+                              playS(ns)
                           }
                       }
 
-                      Box(modifier = Modifier.fillMaxSize().background(bgBlack)) {
-                          Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                              Spacer(Modifier.height(36.dp))
-
-                              // Top Header
-                              Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                  Column {
-                                      Text("AURA", color = neon, fontSize = 32.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-                                      Text("Sound in full spectrum", color = Color(0xFF8E8E93), fontSize = 13.sp)
-                                  }
-                                  Text("● LIVE", color = neon, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                      Column(Modifier.fillMaxSize().background(dark).padding(16.dp)) {
+                          Spacer(Modifier.height(24.dp))
+                          Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                              Column {
+                                  Text("AURA", color = neon, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                                  Text("Sound in full spectrum", color = Color.Gray, fontSize = 12.sp)
                               }
+                              Text(if (tab == "LIB") "${likes.size} ❤️" else "● LIVE", color = neon, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                          }
+                          Spacer(Modifier.height(16.dp))
 
-                              Spacer(Modifier.height(18.dp))
-
-                              // Screen Tab Content
-                              when (currentTab) {
-                                  "HOME" -> {
-                                      LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 140.dp)) {
-                                          item {
-                                              Text("Featured Albums", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                                              Spacer(Modifier.height(12.dp))
-                                              LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                                  items(songList) { song ->
-                                                      Column(Modifier.width(140.dp).clickable { playSong(song) }) {
-                                                          AsyncImage(model = song.artUrl, contentDescription = null, modifier = Modifier.size(140.dp).clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop)
-                                                          Spacer(Modifier.height(8.dp))
-                                                          Text(song.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                          Text(song.artist, color = Color(0xFF8E8E93), fontSize = 12.sp, maxLines = 1)
-                                                      }
+                          Box(Modifier.weight(1f)) {
+                              when (tab) {
+                                  "HOME" -> LazyColumn(contentPadding = PaddingValues(bottom = 90.dp)) {
+                                      item {
+                                          Text("Featured Albums", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                          Spacer(Modifier.height(10.dp))
+                                          LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                              items(songs) { s ->
+                                                  Column(Modifier.width(130.dp).clickable { playS(s) }) {
+                                                      AsyncImage(model = s.art, contentDescription = null, Modifier.size(130.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
+                                                      Spacer(Modifier.height(6.dp))
+                                                      Text(s.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                      Text(s.artist, color = Color.Gray, fontSize = 11.sp, maxLines = 1)
                                                   }
                                               }
-                                              Spacer(Modifier.height(24.dp))
-                                              Text("Quick Picks", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                                              Spacer(Modifier.height(12.dp))
                                           }
-                                          items(songList) { song ->
-                                              Row(
-                                                  Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(10.dp)).background(surface).clickable { playSong(song) }.padding(10.dp),
-                                                  verticalAlignment = Alignment.CenterVertically
-                                              ) {
-                                                  AsyncImage(model = song.artUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                                          Spacer(Modifier.height(20.dp))
+                                          Text("Quick Picks", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                          Spacer(Modifier.height(10.dp))
+                                      }
+                                      items(songs) { s ->
+                                          Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(10.dp)).background(card).clickable { playS(s) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                              AsyncImage(model = s.art, contentDescription = null, Modifier.size(46.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                                              Spacer(Modifier.width(12.dp))
+                                              Column(Modifier.weight(1f)) {
+                                                  Text(s.title, color = Color.White, maxLines = 1)
+                                                  Text(s.artist, color = Color.Gray, fontSize = 11.sp)
+                                              }
+                                              Text("▶", color = neon, fontSize = 18.sp)
+                                          }
+                                      }
+                                  }
+                                  "SEARCH" -> Column {
+                                      TextField(value = q, onValueChange = { q = it }, placeholder = { Text("Search songs...") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp))
+                                      Spacer(Modifier.height(10.dp))
+                                      LazyColumn(contentPadding = PaddingValues(bottom = 90.dp)) {
+                                          items(songs.filter { it.title.contains(q, true) || it.artist.contains(q, true) }) { s ->
+                                              Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(card).clickable { playS(s) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                  AsyncImage(model = s.art, contentDescription = null, Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Crop)
+                                                  Spacer(Modifier.width(12.dp))
+                                                  Column(Modifier.weight(1f)) { Text(s.title, color = Color.White); Text(s.artist, color = Color.Gray, fontSize = 11.sp) }
+                                                  Text("▶", color = neon)
+                                              }
+                                          }
+                                      }
+                                  }
+                                  "LIB" -> Column {
+                                      Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFF222228)).clickable { picker.launch(arrayOf("audio/*")) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                          Text("📁", fontSize = 22.sp)
+                                          Spacer(Modifier.width(12.dp))
+                                          Column(Modifier.weight(1f)) {
+                                              Text("Add From Phone", color = Color.White, fontWeight = FontWeight.Bold)
+                                              Text("Play your phone's MP3 files", color = Color.Gray, fontSize = 11.sp)
+                                          }
+                                          Text("+", color = neon, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                      }
+                                      Spacer(Modifier.height(14.dp))
+                                      LazyColumn(contentPadding = PaddingValues(bottom = 90.dp)) {
+                                          items(songs) { s ->
+                                              Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(card).clickable { playS(s) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                  AsyncImage(model = s.art, contentDescription = null, Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Crop)
                                                   Spacer(Modifier.width(12.dp))
                                                   Column(Modifier.weight(1f)) {
-                                                      Text(song.title, color = Color.White, fontWeight = FontWeight.Medium, maxLines = 1)
-                                                      Text(song.artist, color = Color(0xFF8E8E93), fontSize = 12.sp, maxLines = 1)
+                                                      Text(s.title, color = Color.White)
+                                                      Text(if (s.isLoc) "Device Audio" else s.artist, color = Color.Gray, fontSize = 11.sp)
                                                   }
-                                                  Text("▶", color = neon, fontSize = 18.sp)
+                                                  Text(if (likes.contains(s.id)) "❤️" else "🤍", fontSize = 18.sp, modifier = Modifier.clickable {
+                                                      if (likes.contains(s.id)) likes.remove(s.id) else likes.add(s.id)
+                                                  })
                                               }
                                           }
                                       }
                                   }
-                                  "SEARCH" -> {
-                                      Column(Modifier.weight(1f)) {
-                                          TextField(
-                                              value = searchQuery,
-                                              onValueChange = { searchQuery = it },
-                                              placeholder = { Text("Search songs or artists...", color = Color.Gray) },
-                                              singleLine = true,
-                                              shape = RoundedCornerShape(12.dp),
-                                              colors = TextFieldDefaults.colors(focusedContainerColor = surface, unfocusedContainerColor = surface, focusedTextColor = Color.White, unfocusedTextColor = Color.White),
-                                              modifier = Modifier.fillMaxWidth()
-                                          )
-                                          Spacer(Modifier.height(14.dp))
-                                          val filtered = songList.filter { it.title.contains(searchQuery, true) || it.artist.contains(searchQuery, true) }
-                                          LazyColumn(contentPadding = PaddingValues(bottom = 140.dp)) {
-                                              items(filtered) { song ->
-                                                  Row(
-                                                      Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(10.dp)).background(surface).clickable { playSong(song) }.padding(10.dp),
-                                                      verticalAlignment = Alignment.CenterVertically
-                                                  ) {
-                                                      AsyncImage(model = song.artUrl, contentDescription = null, modifier = Modifier.size(46.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
-                                                      Spacer(Modifier.width(12.dp))
-                                                      Column(Modifier.weight(1f)) {
-                                                          Text(song.title, color = Color.White)
-                                                          Text(song.artist, color = Color.Gray, fontSize = 12.sp)
-                                                      }
-                                                      Text("▶", color = neon, fontSize = 16.sp)
-                                                  }
-                                              }
-                                          }
-                                      }
-                                  }
-                                  "LIBRARY" -> {
-                                      Column(Modifier.weight(1f)) {
-                                          Row(
-                                              Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(cardBg).clickable { audioPicker.launch(arrayOf("audio/*")) }.padding(16.dp),
-                                              verticalAlignment = Alignment.CenterVertically
-                                          ) {
-                                              Text("📁", fontSize = 24.sp)
-                                              Spacer(Modifier.width(14.dp))
-                                              Column(Modifier.weight(1f)) {
-                                                  Text("Add Songs From Phone", color = Color.White, fontWeight = FontWeight.Bold)
-                                                  Text("Select any MP3 from your phone storage", color = Color.Gray, fontSize = 12.sp)
-                                              }
-                                              Text("+", color = neon, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                                          }
-                                          Spacer(Modifier.height(14.dp))
-                                          Row(
-                                              Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(surface).padding(16.dp),
-                                              verticalAlignment = Alignment.CenterVertically
-                                          ) {
-                                              Text("❤️", fontSize = 24.sp)
-                                              Spacer(Modifier.width(14.dp))
-                                              Column {
-                                                  Text("Liked Tracks", color = Color.White, fontWeight = FontWeight.Bold)
-                                                  Text("${likedSongIds.size} songs liked", color = neon, fontSize = 12.sp)
-                                              }
-                                          }
-                                          Spacer(Modifier.height(18.dp))
-                                          Text("Your Tracks", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                                          Spacer(Modifier.height(8.dp))
-                                          LazyColumn(contentPadding = PaddingValues(bottom = 140.dp)) {
-                                              items(songList) { song ->
-                                                  Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(surface).clickable { playSong(song) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                      AsyncImage(model = song.artUrl, contentDescription = null, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Crop)
-                                                      Spacer(Modifier.width(12.dp))
-                                                      Column(Modifier.weight(1f)) {
-                                                          Text(song.title, color = Color.White, fontSize = 14.sp)
-                                                          Text(if (song.isLocal)
+                              }
+                          }
+
+                          // Bottom Sticky Player & Navigation Bar
+                          Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF1B1B22)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                              AsyncImage(model = curr.art, contentDescription = null, Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                              Spacer(Modifier.width(10.dp))
+                              Column(Modifier.weight(1f)) {
+                                  Text(curr.title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, fontSize = 13.sp)
+                                  Text(curr.artist, color = neon, fontSize = 11.sp, maxLines = 1)
+                              }
+                              IconButton(onClick = { mp?.let { if (it.isPlaying) { it.pause(); play = false } else { it.start(); play = true } } ?: playS(curr) }) {
+                                  Text(if (play) "⏸" else "▶", color = neon, fontSize = 22.sp)
+                              }
+                          }
+
+                          Spacer(Modifier.height(8.dp))
+
+                          Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceAround) {
+                              Text("🏠 Home", color = if (tab == "HOME") neon else Color.Gray, modifier = Modifier.clickable { tab = "HOME" }, fontWeight = FontWeight.Bold)
+                              Text("🔍 Search", color = if (tab == "SEARCH") neon else Color.Gray, modifier = Modifier.clickable { tab = "SEARCH" }, fontWeight = FontWeight.Bold)
+                              Text("📚 Library", color = if (tab == "LIB") neon else Color.Gray, modifier = Modifier.clickable { tab = "LIB" }, fontWeight = FontWeight.Bold)
+                          }
+                      }
+                  }
+              }
+
+              override fun onDestroy() {
+                  super.onDestroy()
+                  mp?.release()
+                  mp = null
+              }
+          }
+          EOF
+
+      - name: Build Debug APK
+        run: gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AURA-Music-Player
+          path: app/build/outputs/apk/debug/*.apk
